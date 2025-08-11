@@ -5,6 +5,7 @@ import prisma from "@/lib/prisma";
 import WhatsAppInterface from "./Components/WhatsappInterface";
 import { sendMessage } from "./action";
 
+export const dynamic = 'force-dynamic'; 
 
 const whatsappWeb = async () => {
   const conversations = await prisma.conversation.findMany({
