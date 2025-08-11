@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useCallback, useRef } from "react";
 import {
   Search,
   MoreVertical,
@@ -10,10 +10,11 @@ import {
   Paperclip,
   Mic,
   ArrowLeft,
+  Loader2,
+  RefreshCw,
 } from "lucide-react";
 import { sendMessage } from "../action";
 import { getMessages } from "../action";
-
 
 const WhatsAppInterface = () => {
   const [selectedChat, setSelectedChat] = useState<any>(null);
@@ -21,147 +22,215 @@ const WhatsAppInterface = () => {
   const [isMobile, setIsMobile] = useState(
     typeof window !== "undefined" ? window.innerWidth < 768 : false
   );
-  const [conversationArray,setconversationArray]=useState<any>([])
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [conversationArray, setConversationArray] = useState<any>([]);
+  const [sendingMessage, setSendingMessage] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  const getMessagesFromDbAndSet=async()=>{
-    const convo=await getMessages();
-    setconversationArray(convo);
-  }
+  const getMessagesFromDbAndSet = async (showLoading = true) => {
+    try {
+      if (showLoading && conversationArray.length === 0) {
+        setInitialLoading(true);
+      } else if (showLoading) {
+        setRefreshing(true);
+      }
+      
+      const convo = await getMessages();
+      setConversationArray(convo || []);
+      
+      // Update selected chat if it exists
+      if (selectedChat && convo) {
+        const updatedSelectedChat = convo.find(
+          (conv: any) => conv.id === selectedChat.id
+        );
+        if (updatedSelectedChat) {
+          // Transform the updated conversation to match our format
+          const transformedUpdated = transformSingleConversation(updatedSelectedChat);
+          setSelectedChat(transformedUpdated);
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching messages:", error);
+    } finally {
+      setInitialLoading(false);
+      setRefreshing(false);
+    }
+  };
 
+  // Transform a single conversation
+  const transformSingleConversation = (conversation: any) => {
+    const customerMessage = conversation.messages?.find(
+      (msg: any) => msg.direction === "inbound"
+    );
+    const customerPhone = customerMessage?.wa_id || conversation.conversation_id;
+    const customerName = `+${customerPhone}`;
+
+    const sortedMessages = conversation.messages?.sort(
+      (a: any, b: any) =>
+        new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+    ) || [];
+
+    const lastMessage = sortedMessages[sortedMessages.length - 1];
+    const lastMessageText = lastMessage?.text_body || "No messages";
+
+    const formatTime = (timestamp: string) => {
+      const date = new Date(timestamp);
+      const now = new Date();
+      const diffTime = Math.abs(now.getTime() - date.getTime());
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+      if (diffDays === 1) {
+        return date.toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+      } else if (diffDays === 2) {
+        return "Yesterday";
+      } else if (diffDays > 2) {
+        return date.toLocaleDateString();
+      }
+      return date.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    };
+
+    const lastMessageTime = lastMessage ? formatTime(lastMessage.timestamp) : "";
+
+    const unreadCount = conversation.received?.filter((msg: any) => {
+      const msgTime = new Date(msg.timestamp).getTime();
+      const oneHourAgo = Date.now() - 60 * 60 * 1000;
+      return msgTime > oneHourAgo;
+    }).length || 0;
+
+    const transformedMessages = sortedMessages.map((msg: any) => ({
+      id: msg.id,
+      text: msg.text_body,
+      sent: msg.direction === "outbound",
+      time: formatTime(msg.timestamp),
+      status: msg.status,
+    }));
+
+    const avatar = `https://api.dicebear.com/7.x/initials/svg?seed=${customerName}&backgroundColor=25D366&textColor=ffffff`;
+
+    return {
+      id: conversation.id,
+      conversation_id: conversation.conversation_id,
+      name: customerName,
+      phone: customerPhone,
+      avatar: avatar,
+      lastMessage: lastMessageText,
+      time: lastMessageTime,
+      unread: unreadCount,
+      messages: transformedMessages,
+      rawData: conversation,
+    };
+  };
+
+  // Initial load and setup polling
+  React.useEffect(() => {
+    getMessagesFromDbAndSet();
+
+    // Set up polling for new messages every 5 seconds
+    intervalRef.current = setInterval(() => {
+      getMessagesFromDbAndSet(false);
+    }, 5000);
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, []);
+
+  // Handle window resize
   React.useEffect(() => {
     if (typeof window === "undefined") return;
     const handleResize = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener("resize", handleResize);
-    getMessagesFromDbAndSet()
-
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
   console.log("Conversation Array", conversationArray);
 
-  // Transform API data to chat format
+  // Transform API data to chat format with memoization
   const transformedChats = useMemo(() => {
     if (!conversationArray || !Array.isArray(conversationArray)) return [];
 
-    return conversationArray.map((conversation) => {
-      // Get the customer's phone number (wa_id from inbound messages)
-      const customerMessage = conversation.messages?.find(
-        (msg:any) => msg.direction === "inbound"
-      );
-      const customerPhone =
-        customerMessage?.wa_id || conversation.conversation_id;
-
-      // Generate a name from phone number (you can enhance this with actual contact data)
-      const customerName = `+${customerPhone}`;
-
-      // Get last message
-      const sortedMessages =
-        conversation.messages?.sort(
-          (a:any, b:any) =>
-            new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-        ) || [];
-
-      const lastMessage = sortedMessages[sortedMessages.length - 1];
-      const lastMessageText = lastMessage?.text_body || "No messages";
-
-      // Format time
-      const formatTime = (timestamp: string) => {
-        const date = new Date(timestamp);
-        const now = new Date();
-        const diffTime = Math.abs(now.getTime() - date.getTime());
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-        if (diffDays === 1) {
-          return date.toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          });
-        } else if (diffDays === 2) {
-          return "Yesterday";
-        } else if (diffDays > 2) {
-          return date.toLocaleDateString();
-        }
-        return date.toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        });
-      };
-
-      const lastMessageTime = lastMessage
-        ? formatTime(lastMessage.timestamp)
-        : "";
-
-      // Count unread messages (assuming inbound messages that are recent could be unread)
-      const unreadCount =
-        conversation.received?.filter((msg:any) => {
-          const msgTime = new Date(msg.timestamp).getTime();
-          const oneHourAgo = Date.now() - 60 * 60 * 1000;
-          return msgTime > oneHourAgo;
-        }).length || 0;
-
-      // Transform messages for the chat view
-      const transformedMessages = sortedMessages.map((msg:any) => ({
-        id: msg.id,
-        text: msg.text_body,
-        sent: msg.direction === "outbound",
-        time: formatTime(msg.timestamp),
-        status: msg.status,
-      }));
-
-      // Generate avatar based on phone number (you can replace with actual profile pics)
-      const avatarSeed = customerPhone.slice(-4);
-      const avatar = `https://api.dicebear.com/7.x/initials/svg?seed=${customerName}&backgroundColor=25D366&textColor=ffffff`;
-
-      return {
-        id: conversation.id,
-        conversation_id: conversation.conversation_id,
-        name: customerName,
-        phone: customerPhone,
-        avatar: avatar,
-        lastMessage: lastMessageText,
-        time: lastMessageTime,
-        unread: unreadCount,
-        messages: transformedMessages,
-        rawData: conversation,
-      };
-    });
+    return conversationArray
+      .map(transformSingleConversation)
+      .sort((a, b) => {
+        // Sort by last message time, most recent first
+        const timeA = new Date(a.rawData.last_message_at || 0).getTime();
+        const timeB = new Date(b.rawData.last_message_at || 0).getTime();
+        return timeB - timeA;
+      });
   }, [conversationArray]);
 
   const handleSendMessage = async () => {
-    console.log("Selected Chat", selectedChat);
-    if (message.trim() && selectedChat) {
-      // Here you would typically send the message to your API
-      console.log("Sending message:", message, "to:", selectedChat.phone);
+    if (message.trim() && selectedChat && !sendingMessage) {
+      setSendingMessage(true);
+      
+      try {
+        console.log("Sending message:", message, "to:", selectedChat.phone);
 
-      // For demo purposes, add the message to the current chat
-      const newMessage = {
-        id: `temp-${Date.now()}`,
-        text: message,
-        sent: true,
-        time: new Date().toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-        status: "sending",
-      };
+        // Optimistically add message to UI
+        const newMessage = {
+          id: `temp-${Date.now()}`,
+          text: message,
+          sent: true,
+          time: new Date().toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+          status: "sending",
+        };
 
-      const contact = {
-        wa_id: selectedChat.conversation_id,
-        profile: { name: selectedChat.name,},
-      };
-      console.log("COntact",contact)
-      const messageSent = await sendMessage(contact,message);
-      // Update selected chat with new message
-
-      if (messageSent.success == true) {
+        // Update UI immediately
         setSelectedChat((prev: any) => ({
           ...prev,
           messages: [...prev.messages, newMessage],
           lastMessage: message,
           time: newMessage.time,
         }));
+
+        const contact = {
+          wa_id: selectedChat.conversation_id,
+          profile: { name: selectedChat.name },
+        };
+
+        const messageSent = await sendMessage(contact, message);
+
+        if (messageSent.success === true) {
+          // Update the message status to sent
+          setSelectedChat((prev: any) => ({
+            ...prev,
+            messages: prev.messages.map((msg: any) =>
+              msg.id === newMessage.id ? { ...msg, status: "sent" } : msg
+            ),
+          }));
+
+          // Refresh conversations to get the latest data
+          setTimeout(() => {
+            getMessagesFromDbAndSet(false);
+          }, 1000);
+        } else {
+          // Remove failed message or mark as failed
+          setSelectedChat((prev: any) => ({
+            ...prev,
+            messages: prev.messages.map((msg: any) =>
+              msg.id === newMessage.id ? { ...msg, status: "failed" } : msg
+            ),
+          }));
+        }
+      } catch (error) {
+        console.error("Error sending message:", error);
+        // Handle error - could show toast notification
+      } finally {
+        setSendingMessage(false);
+        setMessage("");
       }
-      setMessage("");
     }
   };
 
@@ -173,7 +242,26 @@ const WhatsAppInterface = () => {
     setSelectedChat(null);
   };
 
-  // Show loading or empty state if no data
+  const handleRefresh = () => {
+    getMessagesFromDbAndSet(true);
+  };
+
+  // Loading screen
+  if (initialLoading) {
+    return (
+      <div className="flex h-screen bg-gray-100 items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 animate-spin text-green-500 mx-auto mb-4" />
+          <h2 className="text-xl font-medium text-gray-700 mb-2">
+            Loading Conversations...
+          </h2>
+          <p className="text-gray-500">Please wait while we fetch your messages</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show empty state if no data
   if (!conversationArray || conversationArray.length === 0) {
     return (
       <div className="flex h-screen bg-gray-100 items-center justify-center">
@@ -182,7 +270,14 @@ const WhatsAppInterface = () => {
           <h2 className="text-xl font-medium text-gray-700 mb-2">
             No Conversations
           </h2>
-          <p className="text-gray-500">Start a conversation to see it here</p>
+          <p className="text-gray-500 mb-4">Start a conversation to see it here</p>
+          <button
+            onClick={handleRefresh}
+            className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 flex items-center gap-2 mx-auto"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Refresh
+          </button>
         </div>
       </div>
     );
@@ -202,6 +297,15 @@ const WhatsAppInterface = () => {
             WA
           </div>
           <div className="flex space-x-2">
+            <button
+              onClick={handleRefresh}
+              className={`p-2 text-gray-600 hover:bg-gray-200 rounded-full ${
+                refreshing ? "animate-spin" : ""
+              }`}
+              disabled={refreshing}
+            >
+              <RefreshCw size={20} />
+            </button>
             <button className="p-2 text-gray-600 hover:bg-gray-200 rounded-full">
               <MoreVertical size={20} />
             </button>
@@ -220,6 +324,16 @@ const WhatsAppInterface = () => {
           </div>
         </div>
 
+        {/* Refresh indicator */}
+        {refreshing && (
+          <div className="px-3 py-2 bg-green-50 border-b border-green-100">
+            <div className="flex items-center text-green-600 text-sm">
+              <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              Refreshing conversations...
+            </div>
+          </div>
+        )}
+
         {/* Chat List */}
         <div className="flex-1 overflow-y-auto">
           {transformedChats.map((chat) => (
@@ -235,7 +349,6 @@ const WhatsAppInterface = () => {
                 alt={chat.name}
                 className="w-12 h-12 rounded-full mr-3"
                 onError={(e) => {
-                  // Fallback to a simple colored circle with initials
                   const target = e.target as HTMLImageElement;
                   target.style.display = "none";
                   const fallback = target.nextElementSibling as HTMLElement;
@@ -366,6 +479,7 @@ const WhatsAppInterface = () => {
                                 <span className="text-blue-300">✓✓</span>
                               )}
                               {msg.status === "sending" && "⏳"}
+                              {msg.status === "failed" && "❌"}
                             </span>
                           )}
                         </div>
@@ -394,14 +508,20 @@ const WhatsAppInterface = () => {
                     placeholder="Type a message"
                     className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-full focus:outline-none focus:ring-2 focus:ring-green-500"
                     onKeyPress={(e) => e.key === "Enter" && handleSendMessage()}
+                    disabled={sendingMessage}
                   />
                 </div>
                 {message.trim() ? (
                   <button
                     onClick={handleSendMessage}
-                    className="p-2 bg-green-500 text-white rounded-full hover:bg-green-600"
+                    className="p-2 bg-green-500 text-white rounded-full hover:bg-green-600 disabled:opacity-50"
+                    disabled={sendingMessage}
                   >
-                    <Send size={20} />
+                    {sendingMessage ? (
+                      <Loader2 size={20} className="animate-spin" />
+                    ) : (
+                      <Send size={20} />
+                    )}
                   </button>
                 ) : (
                   <button className="p-2 text-gray-600 hover:bg-gray-100 rounded-full">
@@ -435,4 +555,3 @@ const WhatsAppInterface = () => {
 };
 
 export default WhatsAppInterface;
-  
