@@ -1,36 +1,248 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# WhatsDown
 
-## Getting Started
+A WhatsApp Web lookalike application built with Next.js that receives messages and status updates via webhooks and displays them in a familiar chat interface.
 
-First, run the development server:
+## 🚀 Features
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- **Real-time messaging**: Receive messages via webhook endpoints
+- **WhatsApp-like UI**: Familiar chat interface with conversation list and message display
+- **Conversation segregation**: Automatically organizes messages by conversation/contact
+- **Status updates**: Handles both message and status payloads
+- **Responsive design**: Works across desktop and mobile devices
+
+
+## 🛠 Tech Stack
+
+- **Frontend**: Next.js (React framework)
+- **Database**: MongoDB with Prisma ORM
+- **Styling**:Tailwind CSS 
+- **API**: RESTful endpoints for webhook handling
+
+## 📁 Database Schema
+
+### Conversation
+Represents individual contacts or chat participants
+```prisma
+model Conversation {
+  id              String    @id @default(auto()) @map("_id") @db.ObjectId
+  name            String
+  wa_id           String
+  conversation_id String    @unique
+  messages        Message[]
+  last_message_at DateTime
+  created_at      DateTime
+}
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Message
+Stores all text messages within conversations
+```prisma
+model Message {
+  id              String       @id @default(auto()) @map("_id") @db.ObjectId
+  message_id      String       @unique
+  conversation    Conversation @relation(fields: [conversation_id], references: [conversation_id])
+  conversation_id String
+  direction       String 
+  type            String 
+  status          String       @default("recieved") 
+  text_body       String?
+  timestamp       DateTime
+  created_at      DateTime     @default(now())
+  updated_at      DateTime     @updatedAt
+  sender_wa_id    String
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+  @@index([conversation_id])
+  @@index([timestamp])
+}
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 🔧 Installation
 
-## Learn More
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/Aman-web-dev/Whatsdown.git
+   cd whatsdown
+   ```
 
-To learn more about Next.js, take a look at the following resources:
+2. **Install dependencies**
+   ```bash
+   npm install
+   ```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+3. **Set up environment variables**
+   Create a `.env` file in the root directory:
+   ```env
+   DATABASE_URL="mongodb://localhost:27017/whatsdown"
+   # or your MongoDB connection string
+   MONGODB_URI="your_mongodb_connection_string"
+   ```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+4. **Set up Prisma**
+   ```bash
+   npx prisma generate
+   npx prisma db push
+   ```
 
-## Deploy on Vercel
+5. **Run the development server**
+   ```bash
+   npm run dev
+   ```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+6. **Access the application**
+   - Frontend: `http://localhost:3000/`
+   - Webhook endpoint: `http://localhost:3000/webhook`
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## 📡 API Endpoints
+
+### Webhook Endpoint
+**POST** `/webhook`
+
+Receives message and status payloads and stores them in the database.
+
+#### Request Body Examples
+
+**Message Payload:**
+```json
+{
+  "payload_type": "whatsapp_webhook",
+  "_id": "conv1-msg1-user",
+  "metaData": {
+    "entry": [
+      {
+        "changes": [
+          {
+            "field": "messages",
+            "value": {
+              "contacts": [
+                {
+                  "profile": {
+                    "name": "Ravi Kumar"
+                  },
+                  "wa_id": "919937320320"
+                }
+              ],
+              "messages": [
+                {
+                  "from": "919937320320",
+                  "id": "wamid.HBgMOTE5OTY3NTc4NzIwFQIAEhggMTIzQURFRjEyMzQ1Njc4OTA=",
+                  "timestamp": "1754400000",
+                  "text": {
+                    "body": "Hi, I’d like to know more about your services."
+                  },
+                  "type": "text"
+                }
+              ],
+              "messaging_product": "whatsapp",
+              "metadata": {
+                "display_phone_number": "918329446654",
+                "phone_number_id": "629305560276479"
+              }
+            }
+          }
+        ],
+        "id": "30164062719905277"
+      }
+    ],
+    "gs_app_id": "conv1-app",
+    "object": "whatsapp_business_account"
+  },
+  "createdAt": "2025-08-06 12:00:00",
+  "startedAt": "2025-08-06 12:00:00",
+  "completedAt": "2025-08-06 12:00:01",
+  "executed": true
+}
+
+```
+
+**Status Payload:**
+```json
+{
+  "payload_type": "whatsapp_webhook",
+  "_id": "conv1-msg2-status",
+  "metaData": {
+    "entry": [
+      {
+        "changes": [
+          {
+            "field": "messages",
+            "value": {
+              "messaging_product": "whatsapp",
+              "metadata": {
+                "display_phone_number": "918329446654",
+                "phone_number_id": "629305560276479"
+              },
+              "statuses": [
+                {
+                  "conversation": {
+                    "id": "conv1-convo-id",
+                    "origin": {
+                      "type": "user_initiated"
+                    }
+                  },
+                  "gs_id": "conv1-msg2-gs-id",
+                  "id": "wamid.HBgMOTE5OTY3NTc4NzIwFQIAEhggNDc4NzZBQ0YxMjdCQ0VFOTk2NzA3MTI4RkZCNjYyMjc=",
+                  "meta_msg_id": "wamid.HBgMOTE5OTY3NTc4NzIwFQIAEhggNDc4NzZBQ0YxMjdCQ0VFOTk2NzA3MTI4RkZCNjYyMjc=",
+                  "recipient_id": "919937320320",
+                  "status": "read",
+                  "timestamp": "1754400040"
+                }
+              ]
+            }
+          }
+        ],
+        "id": "30164062719905278"
+      }
+    ],
+    "gs_app_id": "conv1-app",
+    "object": "whatsapp_business_account",
+    "startedAt": "2025-08-06 12:00:40",
+    "completedAt": "2025-08-06 12:00:40",
+    "executed": true
+  }
+}
+
+```
+
+#### Response
+```json
+{
+  "success": true,
+  "message": "Payload processed successfully"
+}
+```
+
+## 🏗 Project Structure
+
+```
+whatsdown/
+├── prisma/
+│   ├── schema.prisma
+│   └── migrations/
+├── src/
+│   ├── pages/
+│   │   ├── api/
+│   │   │   └── webhook.js
+│   │   └── index.js
+│   ├── components/
+│   │   ├── ChatInterface.js
+│   │   ├── ConversationList.js
+│   │   └── MessageDisplay.js
+│   ├── lib/
+│   │   └── prisma.js
+│   └── styles/
+├── public/
+├── package.json
+├── next.config.js
+└── README.md
+└── tsconfig.json
+└── postcss.config.mjs
+```
+
+## 💻 Usage
+
+1. **Start the application**: The frontend will be available at `http://localhost:3000/`
+
+2. **Send webhook data**: POST requests to `http://localhost:3000/webhook` with message or status payloads
+
+3. **View messages**: The frontend automatically displays new conversations and messages as they're received
+

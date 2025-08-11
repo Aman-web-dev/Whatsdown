@@ -1,4 +1,3 @@
-
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 
@@ -24,7 +23,10 @@ export async function POST(req: Request) {
       await processMessagePayload(payload);
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({
+      success: true,
+      message: "Payload processed successfully",
+    });
   } catch (error) {
     console.error("Webhook processing error:", error);
     return NextResponse.json(
