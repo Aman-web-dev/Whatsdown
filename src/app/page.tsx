@@ -1,4 +1,6 @@
 
+'use server'
+
 import prisma from "@/lib/prisma";
 import WhatsAppInterface from "./Components/WhatsappInterface";
 import { sendMessage } from "./action";
@@ -25,10 +27,6 @@ const whatsappWeb = async () => {
       received,
     };
   });
-
-
-
-
   return <WhatsAppInterface ConversationArray={conversationArray}/>;
 };
 
