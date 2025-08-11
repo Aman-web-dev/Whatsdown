@@ -64,7 +64,7 @@ const WhatsAppInterface = () => {
       (msg: any) => msg.direction === "inbound"
     );
     const customerPhone = customerMessage?.wa_id || conversation.conversation_id;
-    const customerName = `+${customerPhone}`;
+    const customerName = conversation.name;
 
     const sortedMessages = conversation.messages?.sort(
       (a: any, b: any) =>
