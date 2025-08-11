@@ -1,6 +1,3 @@
-
-'use server'
-
 import prisma from "@/lib/prisma";
 import WhatsAppInterface from "./Components/WhatsappInterface";
 import { sendMessage } from "./action";
