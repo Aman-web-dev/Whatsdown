@@ -1,7 +1,12 @@
 
+
+
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js" // here do not use the new client (prisma-client)
+  binaryTargets = ["native", "linux-musl", "rhel-openssl-3.0.x"]  // first one is for cross-platform, second one for docker, last one for serverless environment. safe to include all
+  output        = "../src/generated/client" // it is better to include the generator inside `src/` or `app/` if `src/` not available.
 }
+
 
 datasource db {
   provider = "mongodb"
