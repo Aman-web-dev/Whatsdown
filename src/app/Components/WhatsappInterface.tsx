@@ -12,31 +12,38 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import { sendMessage } from "../action";
-const WhatsAppInterface = ({
-  ConversationArray,
-}: {
-  ConversationArray: any[];
-}) => {
+import { getMessages } from "../action";
+
+
+const WhatsAppInterface = () => {
   const [selectedChat, setSelectedChat] = useState<any>(null);
   const [message, setMessage] = useState("");
   const [isMobile, setIsMobile] = useState(
     typeof window !== "undefined" ? window.innerWidth < 768 : false
   );
+  const [conversationArray,setconversationArray]=useState<any>([])
+
+  const getMessagesFromDbAndSet=async()=>{
+    const convo=await getMessages();
+    setconversationArray(convo);
+  }
 
   React.useEffect(() => {
     if (typeof window === "undefined") return;
     const handleResize = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener("resize", handleResize);
+    getMessagesFromDbAndSet()
+
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  console.log("Conversation Array", ConversationArray);
+  console.log("Conversation Array", conversationArray);
 
   // Transform API data to chat format
   const transformedChats = useMemo(() => {
-    if (!ConversationArray || !Array.isArray(ConversationArray)) return [];
+    if (!conversationArray || !Array.isArray(conversationArray)) return [];
 
-    return ConversationArray.map((conversation) => {
+    return conversationArray.map((conversation) => {
       // Get the customer's phone number (wa_id from inbound messages)
       const customerMessage = conversation.messages?.find(
         (msg:any) => msg.direction === "inbound"
@@ -118,7 +125,7 @@ const WhatsAppInterface = ({
         rawData: conversation,
       };
     });
-  }, [ConversationArray]);
+  }, [conversationArray]);
 
   const handleSendMessage = async () => {
     console.log("Selected Chat", selectedChat);
@@ -167,7 +174,7 @@ const WhatsAppInterface = ({
   };
 
   // Show loading or empty state if no data
-  if (!ConversationArray || ConversationArray.length === 0) {
+  if (!conversationArray || conversationArray.length === 0) {
     return (
       <div className="flex h-screen bg-gray-100 items-center justify-center">
         <div className="text-center">

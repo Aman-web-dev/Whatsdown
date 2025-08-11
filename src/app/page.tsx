@@ -1,31 +1,19 @@
+import { unstable_noStore as noStore } from 'next/cache';
 import prisma from "@/lib/prisma";
-import WhatsAppInterface from "./Components/WhatsappInterface";
-import { sendMessage } from "./action";
+import WhatsAppInterface from './Components/WhatsappInterface';
 
-export const dynamic = 'force-dynamic'; 
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 const whatsappWeb = async () => {
-  const conversations = await prisma.conversation.findMany({
-    include: {
-      messages: {
-        orderBy: { timestamp: "asc" },
-      },
-    },
-  });
-
+  noStore(); // Disable all caching
   
 
-  // Group messages into sent/received for each conversation
-  const conversationArray = conversations.map((convo) => {
-    const sent = convo.messages.filter((m) => m.direction === "outbound");
-    const received = convo.messages.filter((m) => m.direction === "inbound");
-    return {
-      ...convo,
-      sent,
-      received,
-    };
-  });
-  return <WhatsAppInterface ConversationArray={conversationArray}/>;
+
+  console.log('Fresh data loaded at:', new Date().toISOString());
+  
+  return <WhatsAppInterface />;
 };
 
 export default whatsappWeb;

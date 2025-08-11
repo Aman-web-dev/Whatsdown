@@ -58,3 +58,28 @@ export const sendMessage = async (contact: Contact, messageText: string) => {
     };
   }
 };
+
+
+
+
+export const getMessages=async()=>{
+    const conversations = await prisma.conversation.findMany({
+    include: {
+      messages: {
+        orderBy: { timestamp: "asc" },
+      },
+    },
+  });
+
+  const conversationArray = conversations.map((convo) => {
+    const sent = convo.messages.filter((m) => m.direction === "outbound");
+    const received = convo.messages.filter((m) => m.direction === "inbound");
+    return {
+      ...convo,
+      sent,
+      received,
+    };
+  });
+
+  return conversationArray;
+}
