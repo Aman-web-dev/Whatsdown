@@ -2,6 +2,10 @@
   "name": "whatsdown",
   "version": "0.1.0",
   "private": true,
+  "prisma": {
+  "engines": {
+    "binaryTargets": ["native", "rhel-openssl-3.0.x"]
+  }},
   "scripts": {
     "dev": "next dev",
     "start": "next start",
